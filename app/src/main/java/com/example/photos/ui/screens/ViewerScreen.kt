@@ -16,14 +16,62 @@ import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import com.example.photos.data.MediaItem
 import com.example.photos.ui.components.MediaUiState
+import android.app.Activity
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.example.photos.R
 
 @Composable
 fun ViewerScreen(uiState: MediaUiState, mediaId: Long, onBack: () -> Unit) {
-    when (uiState) {
-        MediaUiState.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-            CircularProgressIndicator()
+    ImmersiveMode()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+    ) {
+        when (uiState) {
+            MediaUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+            is MediaUiState.Content -> ViewerPager(uiState.items, mediaId, onBack)
         }
-        is MediaUiState.Content -> ViewerPager(uiState.items, mediaId, onBack)
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .safeDrawingPadding()
+                .padding(8.dp)
+                // Nền mờ để mũi tên trắng đọc được cả trên ảnh sáng
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+        ) {
+            Icon(
+                painter = painterResource(id =R.drawable.arrow_upward),
+                contentDescription = "Quay lại",
+                tint = Color.White,
+                modifier = Modifier.rotate(240f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImmersiveMode() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as Activity).window
+        val controller = WindowCompat.getInsetsController(window, view)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+        onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 }
 
