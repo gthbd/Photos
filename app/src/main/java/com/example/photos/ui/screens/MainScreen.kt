@@ -1,6 +1,7 @@
 package com.example.photos.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,10 +46,11 @@ import androidx.compose.ui.unit.sp
 import com.example.photos.R
 
 @Composable
-fun MainScreen(uiState: MediaUiState, modifier: Modifier = Modifier) {
-    val viewModel: MediaViewModel = viewModel()
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+fun MainScreen(
+    uiState: MediaUiState,
+    onMediaClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -60,7 +62,7 @@ fun MainScreen(uiState: MediaUiState, modifier: Modifier = Modifier) {
         Row(modifier = Modifier.weight(6f)) {
             when (val state = uiState) {
                 MediaUiState.Loading -> CircularProgressIndicator()
-                is MediaUiState.Content -> MediaGrid(state.items)
+                is MediaUiState.Content -> MediaGrid(state.items, onMediaClick)
             }
         }
     }
@@ -78,7 +80,7 @@ private fun GalleryTitle() {
 }
 
 @Composable
-private fun MediaGrid(mediaItems: List<MediaItem>) {
+private fun MediaGrid(mediaItems: List<MediaItem>, onMediaClick: (Long) -> Unit) {
     val context = LocalContext.current
     val imageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -88,30 +90,29 @@ private fun MediaGrid(mediaItems: List<MediaItem>) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(5),
         modifier = Modifier.fillMaxSize(),
-        // Tránh ô cuối bị thanh điều hướng che khi bật edge-to-edge
         contentPadding = WindowInsets.navigationBars.asPaddingValues(),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        items(items = mediaItems, key = { it.id }) { MediaCell(it, imageLoader) }
+        items(items = mediaItems, key = { it.id }) { item ->
+            MediaCell(item, onClick = { onMediaClick(item.id) })
+        }
     }
 }
 
 @Composable
-private fun MediaCell(item: MediaItem, imageLoader: ImageLoader) {
-    Box (
+private fun MediaCell(item: MediaItem, onClick: () -> Unit) {
+    Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
     ) {
         AsyncImage(
             model = item.uri,
-            imageLoader = imageLoader,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .aspectRatio(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxSize(),
         )
         if (item.isVideo) {
             VideoBadge(
@@ -121,13 +122,11 @@ private fun MediaCell(item: MediaItem, imageLoader: ImageLoader) {
         }
     }
 }
-
 @Composable
-private fun VideoBadge(durationMs: Long, modifier: Modifier = Modifier) {
+fun VideoBadge(durationMs: Long, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .padding(2.dp)
-            // Nền mờ để chữ trắng đọc được cả trên ảnh sáng
             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
             .padding(horizontal = 3.dp, vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,

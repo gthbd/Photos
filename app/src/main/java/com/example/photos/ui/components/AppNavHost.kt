@@ -1,6 +1,5 @@
 package com.example.photos.ui.components
 
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
@@ -14,7 +13,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.photos.ui.components.MediaViewModel
+import com.example.photos.ui.screens.ViewerScreen
 
 @Serializable
 data object GridRoute
@@ -31,10 +30,19 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
     NavHost(navController = navController, startDestination = GridRoute) {
-        composable<GridRoute> { MainScreen(uiState, modifier) }
+        composable<GridRoute> { MainScreen(
+            uiState = uiState,
+            onMediaClick = { mediaId ->
+                navController.navigate(ViewerRoute(mediaId)) { launchSingleTop = true }
+            },
+            modifier = modifier,
+        ) }
         composable<ViewerRoute> { backStackEntry ->
-            val route = backStackEntry.toRoute<ViewerRoute>()
-            Text("Viewer: ${route.mediaId}")
+            ViewerScreen(
+                uiState = uiState,
+                mediaId = backStackEntry.toRoute<ViewerRoute>().mediaId,
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }

@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 fun GreetingPreview() {
     PhotosTheme {
         PhotosTheme {
-            MainScreen(uiState = MediaUiState.Loading)
+            MainScreen(uiState = MediaUiState.Loading, onMediaClick = {})
         }
     }
 }
