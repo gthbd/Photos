@@ -61,4 +61,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:<cùng phiên bản lifecycle>")
     implementation("io.coil-kt.coil3:coil-compose:3.6.2")
     implementation("io.coil-kt.coil3:coil-video:3.6.2")
+
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
+    implementation("androidx.media3:media3-ui-compose-material3:1.11.1")
 }

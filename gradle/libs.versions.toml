@@ -10,6 +10,7 @@ kotlin = "2.4.0"
 composeBom = "2026.02.01"
 navigation = "2.10.2"
 kotlinSerialization = "1.11.0"
+media3 = "1.11.1"
 
 
 [libraries]

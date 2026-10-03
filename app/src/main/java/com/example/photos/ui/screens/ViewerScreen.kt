@@ -24,13 +24,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.compose.ContentFrame
 import com.example.photos.R
+import androidx.media3.common.MediaItem as PlayerMediaItem
 
 @Composable
 fun ViewerScreen(uiState: MediaUiState, mediaId: Long, onBack: () -> Unit) {
@@ -57,7 +63,7 @@ fun ViewerScreen(uiState: MediaUiState, mediaId: Long, onBack: () -> Unit) {
                 painter = painterResource(id =R.drawable.arrow_upward),
                 contentDescription = "Quay lại",
                 tint = Color.White,
-                modifier = Modifier.rotate(240f)
+                modifier = Modifier.rotate(270f)
             )
         }
     }
@@ -85,18 +91,54 @@ private fun ViewerPager(items: List<MediaItem>, mediaId: Long, onBack: () -> Uni
     }
 
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
+    val player = rememberViewerPlayer()
+    val currentItem = items.getOrNull(pagerState.settledPage)
+
+    // Khóa theo id thay vì vị trí: refresh() chèn ảnh mới làm vị trí đổi nhưng video đang xem không được phát lại từ đầu
+    LaunchedEffect(currentItem?.id) {
+        if (currentItem?.isVideo == true) {
+            player.setMediaItem(PlayerMediaItem.fromUri(currentItem.uri))
+            player.prepare()
+            player.play()
+        } else {
+            player.stop()
+            player.clearMediaItems()
+        }
+    }
+
     HorizontalPager(
         state = pagerState,
         key = { items[it].id },
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
+        modifier = Modifier.fillMaxSize(),
     ) { page ->
-        AsyncImage(
-            model = items[page].uri,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
+        val item = items[page]
+        if (item.isVideo && item.id == currentItem?.id) {
+            ContentFrame(
+                player = player,
+                modifier = Modifier.fillMaxSize(),
+                shutter = { MediaImage(item) },
+            )
+        } else {
+            MediaImage(item)
+        }
     }
+}
+
+@Composable
+private fun MediaImage(item: MediaItem) {
+    AsyncImage(
+        model = item.uri,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+
+@Composable
+private fun rememberViewerPlayer(): ExoPlayer {
+    val context = LocalContext.current
+    val player = remember(context) { ExoPlayer.Builder(context).build() }
+    DisposableEffect(player) { onDispose { player.release() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { player.pause() }
+    return player
 }
