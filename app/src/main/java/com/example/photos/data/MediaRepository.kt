@@ -35,7 +35,7 @@ class MediaRepository(private val contentResolver: ContentResolver) {
             val durationColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             buildList {
                 while (it.moveToNext()) {
-                    val id = it.getLong(idColumn)
+                                                                                                                                       val id = it.getLong(idColumn)
                     val isVideo = it.getInt(typeColumn) == FileColumns.MEDIA_TYPE_VIDEO
                     val durationMs = it.getLong(durationColumn)
                     add(MediaItem(id, contentUri(id, isVideo), isVideo, durationMs))
