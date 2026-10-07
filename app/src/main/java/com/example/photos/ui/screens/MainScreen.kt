@@ -1,5 +1,6 @@
 package com.example.photos.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,13 +8,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -27,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,24 +42,30 @@ import com.example.photos.R
 import com.example.photos.data.MediaItem
 import com.example.photos.ui.components.MediaUiState
 
+private const val PORTRAIT_COLUMNS = 5
+private const val LANDSCAPE_COLUMNS = 10
+
 @Composable
 fun MainScreen(
     uiState: MediaUiState,
     onMediaClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Row(modifier = Modifier.weight(1f)) {
-            GalleryTitle()
-        }
-        Row(modifier = Modifier.weight(6f)) {
+        GalleryTitle()
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (val state = uiState) {
-                MediaUiState.Loading -> CircularProgressIndicator()
-                is MediaUiState.Content -> MediaGrid(state.items, onMediaClick)
+                MediaUiState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                is MediaUiState.Content -> MediaGrid(
+                    mediaItems = state.items,
+                    columnCount = if (isLandscape) LANDSCAPE_COLUMNS else PORTRAIT_COLUMNS,
+                    onMediaClick = onMediaClick,
+                )
             }
         }
     }
@@ -64,15 +77,15 @@ private fun GalleryTitle() {
         text = "Photos",
         style = MaterialTheme.typography.headlineMedium,
         modifier = Modifier
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            //horizontal 16dp vertical 12dp
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
     )
 }
 
 @Composable
-private fun MediaGrid(mediaItems: List<MediaItem>, onMediaClick: (Long) -> Unit) {
+private fun MediaGrid(mediaItems: List<MediaItem>, columnCount: Int, onMediaClick: (Long) -> Unit) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(5),
+        columns = GridCells.Fixed(columnCount),
         modifier = Modifier.fillMaxSize(),
         contentPadding = WindowInsets.navigationBars.asPaddingValues(),
         horizontalArrangement = Arrangement.spacedBy(2.dp),

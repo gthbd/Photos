@@ -49,6 +49,17 @@ import com.example.photos.R
 import com.example.photos.data.MediaItem
 import com.example.photos.ui.components.MediaUiState
 import androidx.media3.common.MediaItem as PlayerMediaItem
+import kotlinx.coroutines.Job
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.TransformableState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.util.lerp
+import kotlinx.coroutines.launch
 
 @Composable
 fun ViewerScreen(uiState: MediaUiState, mediaId: Long, onBack: () -> Unit) {
@@ -93,6 +104,8 @@ private fun ImmersiveMode() {
     }
 }
 
+private const val NO_MEDIA_ID = -1L
+
 @Composable
 private fun ViewerPager(items: List<MediaItem>, mediaId: Long, onBack: () -> Unit) {
     // Tính một lần: nếu tính lại mỗi lần vẽ, xóa ảnh đang mở sau khi đã vuốt sang ảnh khác sẽ bị đá ra lưới
@@ -105,17 +118,32 @@ private fun ViewerPager(items: List<MediaItem>, mediaId: Long, onBack: () -> Uni
     val pagerState = rememberPagerState(initialPage = initialPage) { items.size }
     val player = rememberViewerPlayer()
     val currentItem = items.getOrNull(pagerState.settledPage)
+    var resumeMediaId by rememberSaveable { mutableLongStateOf(NO_MEDIA_ID) }
+    var resumePositionMs by rememberSaveable { mutableLongStateOf(0L) }
+    var resumePlayWhenReady by rememberSaveable { mutableStateOf(true) }
+    var isResumeConsumed by remember { mutableStateOf(false) }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        resumeMediaId = if (currentItem?.isVideo == true) currentItem.id else NO_MEDIA_ID
+        resumePositionMs = player.currentPosition
+        resumePlayWhenReady = player.playWhenReady
+    }
 
     // Khóa theo id thay vì vị trí: refresh() chèn ảnh mới làm vị trí đổi nhưng video đang xem không được phát lại từ đầu
     LaunchedEffect(currentItem?.id) {
         if (currentItem?.isVideo == true) {
-            player.setMediaItem(PlayerMediaItem.fromUri(currentItem.uri))
+            val isRestoring = !isResumeConsumed && resumeMediaId == currentItem.id
+            player.setMediaItem(
+                PlayerMediaItem.fromUri(currentItem.uri),
+                if (isRestoring) resumePositionMs else 0L,
+            )
             player.prepare()
-            player.play()
+            player.playWhenReady = !isRestoring || resumePlayWhenReady
         } else {
             player.stop()
             player.clearMediaItems()
         }
+        isResumeConsumed = true
     }
 
     HorizontalPager(
@@ -134,11 +162,15 @@ private fun ViewerPager(items: List<MediaItem>, mediaId: Long, onBack: () -> Uni
 
 
 private const val MAX_ZOOM = 5f
+private const val DOUBLE_TAP_ZOOM = 3f
+
 @Composable
 private fun MediaImage(item: MediaItem) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    var zoomJob by remember { mutableStateOf<Job?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     val transformState = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, MAX_ZOOM)
@@ -150,7 +182,7 @@ private fun MediaImage(item: MediaItem) {
             y = (offset.y + panChange.y).coerceIn(-maxOffsetY, maxOffsetY),
         )
     }
-    //hiển thị ảnh
+
     AsyncImage(
         model = item.uri,
         contentDescription = null,
@@ -158,6 +190,24 @@ private fun MediaImage(item: MediaItem) {
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { containerSize = it }
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { tapPosition ->
+                    val startScale = scale
+                    val startOffset = offset
+                    val isZoomed = startScale > 1f
+                    val targetScale = if (isZoomed) 1f else DOUBLE_TAP_ZOOM
+                    val targetOffset = if (isZoomed) Offset.Zero else zoomOffsetAt(tapPosition, containerSize)
+
+                    // Double-tap liên tiếp không được chạy hai animation cùng ghi scale/offset
+                    zoomJob?.cancel()
+                    zoomJob = coroutineScope.launch {
+                        animate(0f, 1f) { progress, _ ->
+                            scale = lerp(startScale, targetScale, progress)
+                            offset = lerp(startOffset, targetOffset, progress)
+                        }
+                    }
+                })
+            }
             // Chưa phóng to thì không nhận kéo, để HorizontalPager còn lật trang
             .transformable(transformState, canPan = { scale > 1f })
             .graphicsLayer {
@@ -167,7 +217,37 @@ private fun MediaImage(item: MediaItem) {
                 translationY = offset.y
             }
     )
+}
 
+// Đi qua transformState để cử chỉ tay và animation loại trừ nhau, và vẫn dùng lại phần clamp trong lambda
+private suspend fun TransformableState.animateTransform(
+    fromScale: Float,
+    toScale: Float,
+    fromOffset: Offset,
+    toOffset: Offset,
+) = transform {
+    var appliedScale = fromScale
+    var appliedOffset = fromOffset
+    animate(0f, 1f) { progress, _ ->
+        val nextScale = lerp(fromScale, toScale, progress)
+        val nextOffset = lerp(fromOffset, toOffset, progress)
+        transformBy(
+            zoomChange = nextScale / appliedScale,
+            panChange = nextOffset - appliedOffset,
+        )
+        appliedScale = nextScale
+        appliedOffset = nextOffset
+    }
+}
+
+// Giữ điểm được tap đứng yên trên màn hình khi phóng quanh tâm khung
+private fun zoomOffsetAt(tapPosition: Offset, containerSize: IntSize): Offset {
+    val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+    val extraScale = DOUBLE_TAP_ZOOM - 1f
+    val maxX = containerSize.width * extraScale / 2f
+    val maxY = containerSize.height * extraScale / 2f
+    val rawOffset = (center - tapPosition) * extraScale
+    return Offset(rawOffset.x.coerceIn(-maxX, maxX), rawOffset.y.coerceIn(-maxY, maxY))
 }
 
 @Composable
